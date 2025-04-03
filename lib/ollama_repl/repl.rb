@@ -85,13 +85,13 @@ module OllamaRepl
     def current_prompt
       case @mode
       when MODE_LLM
-        "🤖 > "
+        "🤖 ❯ "
       when MODE_RUBY
-        "💎 > "
+        "💎 ❯ "
       when MODE_SHELL
-        "❯ "
+        "🐚 ❯ "
       else
-        "> "
+        "?! ❯ "
       end
     end
 
@@ -276,7 +276,7 @@ module OllamaRepl
     end
 
     def handle_model_command(args)
-      available_models = @client.list_models # Fetch fresh list
+      available_models = @client.list_models.sort # Fetch fresh list
 
       if args.nil? || args.empty?
         # List models
