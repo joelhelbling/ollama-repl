@@ -1,0 +1,24 @@
+#!/usr/bin/env ruby
+
+# Set up load paths for development testing without installing the gem
+# This assumes the script is run from the project root or the gem is installed.
+begin
+  # Try loading the installed gem first
+  require 'ollama_repl'
+rescue LoadError
+  # If gem not installed, assume running from source directory
+  lib_path = File.expand_path('../lib', __dir__)
+  $LOAD_PATH.unshift(lib_path) unless $LOAD_PATH.include?(lib_path)
+  begin
+    require 'ollama_repl'
+  rescue LoadError => e
+    puts "Error: Could not load the OllamaRepl library."
+    puts "Please ensure the gem is installed (`gem install ollama_repl`)"
+    puts "or run this script from the root of the gem's source directory."
+    puts "Original error: #{e.message}"
+    exit 1
+  end
+end
+
+# Start the REPL
+OllamaRepl.run
