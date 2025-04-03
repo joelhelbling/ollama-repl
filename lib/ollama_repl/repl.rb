@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+require 'open3'
 
 require 'readline'
 require 'stringio'
@@ -10,6 +11,7 @@ module OllamaRepl
   class Repl
     MODE_LLM = :llm
     MODE_RUBY = :ruby
+    MODE_SHELL = :shell
 
     FILE_TYPE_MAP = {
       '.rb' => 'ruby', '.js' => 'javascript', '.py' => 'python', '.java' => 'java',
@@ -86,6 +88,8 @@ module OllamaRepl
         "🤖 > "
       when MODE_RUBY
         "💎 > "
+      when MODE_SHELL
+        "❯ "
       else
         "> "
       end
@@ -102,6 +106,8 @@ module OllamaRepl
           handle_llm_input(input)
         when MODE_RUBY
           handle_ruby_input(input)
+        when MODE_SHELL
+          handle_shell_input(input)
         end
       end
     end
@@ -124,6 +130,12 @@ module OllamaRepl
         else
           switch_mode(MODE_RUBY) # Switch durable mode
         end
+      when '/shell'
+        if args && !args.empty?
+          handle_shell_input(args) # Single Shell execution
+        else
+          switch_mode(MODE_SHELL) # Switch durable mode
+        end
       when '/file'
         handle_file_command(args)
       when '/model'
@@ -145,7 +157,16 @@ module OllamaRepl
 
     def switch_mode(new_mode)
       @mode = new_mode
-      mode_name = new_mode == MODE_LLM ? "LLM" : "Ruby"
+      mode_name = case new_mode
+                  when MODE_LLM
+                    "LLM"
+                  when MODE_RUBY
+                    "Ruby"
+                  when MODE_SHELL
+                    "Shell"
+                  else
+                    "Unknown"
+                  end
       puts "Switched to #{mode_name} mode."
     end
 
@@ -333,11 +354,15 @@ module OllamaRepl
       puts "Modes:"
       puts "  /llm           Switch to durable LLM interaction mode (default)."
       puts "  /ruby          Switch to durable Ruby execution mode."
+      puts "  /shell         Switch to durable Shell execution mode."
       puts
+
       puts "One-off Actions (stay in current durable mode):"
       puts "  /llm {prompt}  Send a single prompt to the LLM."
       puts "  /ruby {code}   Execute a single line of Ruby code."
+      puts "  /shell {command} Execute a single shell command."
       puts
+
       puts "Commands:"
       puts "  /file {path}   Add the content of the specified file to the context."
       puts "  /model         List available Ollama models."
@@ -349,6 +374,54 @@ module OllamaRepl
       puts "  Ctrl+C         Interrupt current action (or show exit hint)."
       puts "  Ctrl+D         Exit the REPL (at empty prompt)."
       puts "------------------------\n"
+    end
+
+    def handle_shell_input(command)
+      puts "❯ Executing..."
+      add_message('user', "Execute shell command: ```\n#{command}\n```") # Add code to context first
+
+      stdout_str, stderr_str, error = capture_shell_execution(command)
+
+      output_message = "System Message: Shell Execution Output\n"
+      output_message += "STDOUT:\n"
+      output_message += stdout_str.empty? ? "(empty)\n" : stdout_str
+      output_message += "STDERR:\n"
+      output_message += stderr_str.empty? ? "(empty)\n" : stderr_str
+
+      if error
+        error_details = "Error: #{error.class}: #{error.message}\nBacktrace:\n#{error.backtrace.join("\n")}"
+        output_message += "Exception:\n#{error_details}"
+        puts "[Shell Execution Error]"
+        puts error_details
+      else
+        puts "[Shell Execution Result]"
+      end
+
+      puts "--- STDOUT ---"
+      puts stdout_str.empty? ? "(empty)" : stdout_str
+      puts "--- STDERR ---"
+      puts stderr_str.empty? ? "(empty)" : stderr_str
+      puts "--------------"
+
+      add_message('system', output_message)
+    end
+
+    def capture_shell_execution(command)
+      stdout_str = ""
+      stderr_str = ""
+      error = nil
+
+      begin
+        # Execute the command and capture stdout and stderr
+        stdout_str, stderr_str, status = Open3.capture3(command)
+        if !status.success?
+          stderr_str += "Command exited with status: #{status.exitstatus}"
+        end
+      rescue StandardError => e
+        error = e
+      end
+
+      [stdout_str, stderr_str, error]
     end
   end
 end
