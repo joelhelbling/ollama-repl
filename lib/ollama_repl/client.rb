@@ -28,23 +28,49 @@ module OllamaRepl
       @model = new_model
     end
 
-    def chat(messages)
+    # Sends messages to the Ollama API and yields streamed response chunks.
+    def chat(messages, &block)
       payload = {
         model: @model,
         messages: messages,
-        stream: false # Keep it simple for now
+        stream: true # Enable streaming
       }
-      puts "[Debug] Sending to Ollama: #{payload.inspect}" if ENV['DEBUG']
-      response = @conn.post('/api/chat', payload)
-      puts "[Debug] Received from Ollama: #{response.body.inspect}" if ENV['DEBUG']
-      response.body['message']['content'] # Extract content
+      puts "[Debug] Sending to Ollama (streaming): #{payload.inspect}" if ENV['DEBUG']
+
+      full_response_content = String.new # To accumulate content for potential error reporting (ensure mutable)
+
+      @conn.post('/api/chat', payload) do |req|
+        req.options.on_data = proc do |chunk, _overall_received_bytes, _env|
+          # Ollama streams JSON objects separated by newlines
+          chunk.split("\n").each do |line|
+            next if line.strip.empty? # Skip empty lines
+
+            begin
+              parsed_chunk = JSON.parse(line)
+              full_response_content << parsed_chunk.dig('message', 'content').to_s # Accumulate for errors
+              # Yield the parsed chunk for the caller to process
+              yield parsed_chunk if block_given?
+            rescue JSON::ParserError => e
+              # Log or handle partial JSON chunks if necessary, but often indicates end-of-stream issues
+              puts "[Debug] JSON parse error on chunk: #{e.message} - Chunk: #{line.inspect}" if ENV['DEBUG']
+              # Decide if we should raise or just warn
+            end
+          end
+        end
+      end
     rescue Faraday::Error => e
-      raise ApiError, "API request failed: #{e.message} (Response: #{e.response_body if e.respond_to?(:response_body)})"
+      # Include accumulated content in error if available
+      error_details = "API request failed: #{e.message}"
+      error_details += " (Response Body accumulated: #{full_response_content})" unless full_response_content.empty?
+      error_details += " (Original Faraday Response: #{e.response_body if e.respond_to?(:response_body)})"
+      raise ApiError, error_details
     rescue JSON::ParserError => e
-      raise ApiError, "Failed to parse API response: #{e.message}"
+      # This might catch errors if the *entire* stream was somehow treated as one JSON doc,
+      # though the on_data parsing should handle most cases.
+      raise ApiError, "Failed to parse API response stream: #{e.message} (Accumulated: #{full_response_content})"
     rescue NoMethodError, TypeError => e
-      # Handle cases where response structure is unexpected
-      raise ApiError, "Unexpected API response structure: #{e.message} (Body: #{response&.body || 'N/A'})"
+      # Handle cases where chunk structure is unexpected during accumulation or final processing
+      raise ApiError, "Unexpected API response structure in stream: #{e.message} (Accumulated: #{full_response_content})"
     end
 
     def list_models

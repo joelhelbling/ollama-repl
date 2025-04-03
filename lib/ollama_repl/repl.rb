@@ -251,18 +251,38 @@ module OllamaRepl
     end
 
     def handle_llm_input(prompt)
-      puts "🤖 Thinking..."
       add_message('user', prompt)
+      full_response = String.new # Use String.new to ensure mutability
+      print "\nAssistant: " # Print prefix once
+
       begin
-        response_content = @client.chat(@messages)
-        puts "\nAssistant:"
-        puts response_content
-        puts "" # Add a newline for spacing
-        add_message('assistant', response_content)
+        @client.chat(@messages) do |chunk|
+          # Extract content from the message part of the chunk
+          content_part = chunk.dig('message', 'content')
+          unless content_part.nil? || content_part.empty?
+            print content_part # Stream output directly to the console
+            $stdout.flush # Ensure it appears immediately
+            full_response << content_part
+          end
+
+          # Check if the stream is done (Ollama specific field)
+          # if chunk['done']
+          #   # Optional: Handle end-of-stream logic if needed,
+          #   # like printing final stats if provided in the chunk.
+          # end
+        end
+        puts "" # Add a final newline after streaming is complete
+
+        # Add the complete response to history *after* streaming finishes
+        add_message('assistant', full_response) unless full_response.empty?
+
       rescue Client::ApiError => e
-        puts "[API Error interacting with LLM] #{e.message}"
+        puts "\n[API Error interacting with LLM] #{e.message}"
         # Optionally remove the user message that failed
         # @messages.pop if @messages.last&.dig(:role) == 'user'
+      ensure
+        # Ensure a newline even if there was an error during streaming
+        puts "" unless full_response.empty?
       end
     end
 
