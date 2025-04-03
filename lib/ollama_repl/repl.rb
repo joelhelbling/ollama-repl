@@ -36,6 +36,9 @@ module OllamaRepl
       puts "Welcome to Ollama REPL!"
       puts "Using model: #{@client.current_model}"
       puts "Type `/help` for commands."
+      
+      # Pre-cache available models
+      get_available_models
 
       # Check initial connection and model validity
       begin
@@ -79,7 +82,80 @@ module OllamaRepl
     private
 
     def setup_readline
-      # Potential future Readline configuration (e.g., autocompletion)
+      # Cache for available models to improve performance
+      @available_models_cache = nil
+      @last_cache_time = nil
+      
+      Readline.completion_proc = proc do |input|
+        # Don't log anything by default to avoid interfering with the UI
+        debug_enabled = ENV['DEBUG'] == 'true'
+        
+        begin
+          # Get the current input line
+          line = Readline.line_buffer
+          
+          # Determine if this is a model completion context
+          if line.start_with?('/model ')
+            # Get what the user has typed after "/model "
+            partial_name = line[7..-1] || ""
+            
+            # Debug output
+            puts "Model completion: line='#{line}', input='#{input}', partial='#{partial_name}'" if debug_enabled
+            
+            # Only activate completion after 3 chars
+            if partial_name.length >= 3
+              # Get available models (with caching)
+              models = get_available_models(debug_enabled)
+              
+              # Find matching models
+              matches = models.select { |model| model.start_with?(partial_name) }
+              puts "Found #{matches.size} matches: #{matches.inspect}" if debug_enabled
+              
+              if matches.empty?
+                []
+              else
+                # For prefix completion, we need to return the full names
+                matches
+              end
+            else
+              []
+            end
+          else
+            []
+          end
+        rescue => e
+          puts "Error in completion handler: #{e.message}" if debug_enabled
+          puts e.backtrace.join("\n") if debug_enabled
+          []
+        end
+      end
+      
+      # Set the character that gets appended after completion
+      Readline.completion_append_character = " "
+    end
+    
+    # Helper method to get available models with caching
+    def get_available_models(debug_enabled = false)
+      current_time = Time.now
+      
+      # Cache models for 5 minutes to avoid excessive API calls
+      if @available_models_cache.nil? || @last_cache_time.nil? ||
+         (current_time - @last_cache_time) > 300 # 5 minutes
+        
+        puts "Refreshing models cache" if debug_enabled
+        begin
+          @available_models_cache = @client.list_models.sort
+          @last_cache_time = current_time
+          puts "Cache updated with #{@available_models_cache.size} models" if debug_enabled
+        rescue => e
+          puts "Error fetching models: #{e.message}" if debug_enabled
+          @available_models_cache ||= []
+        end
+      else
+        puts "Using cached models (#{@available_models_cache.size})" if debug_enabled
+      end
+      
+      @available_models_cache
     end
 
     def current_prompt
@@ -276,7 +352,8 @@ module OllamaRepl
     end
 
     def handle_model_command(args)
-      available_models = @client.list_models.sort # Fetch fresh list
+      # Use our cached models for consistent behavior with tab completion
+      available_models = get_available_models
 
       if args.nil? || args.empty?
         # List models
@@ -286,6 +363,7 @@ module OllamaRepl
             puts "Available models:"
             available_models.each { |m| puts "- #{m}" }
             puts "\nCurrent model: #{@client.current_model}"
+            puts "\nTip: Type '/model' followed by at least 3 characters and press Tab for autocompletion"
         end
         return
       end
@@ -367,6 +445,7 @@ module OllamaRepl
       puts "  /file {path}   Add the content of the specified file to the context."
       puts "  /model         List available Ollama models."
       puts "  /model {name}  Switch to the specified Ollama model (allows prefix matching)."
+      puts "                 Type at least 3 characters after '/model ' and press Tab for autocompletion."
       puts "  /context       Display the current conversation context."
       puts "  /clear         Clear the conversation context (asks confirmation)."
       puts "  /help          Show this help message."
