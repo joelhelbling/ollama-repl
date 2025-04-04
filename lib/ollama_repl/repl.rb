@@ -5,9 +5,12 @@ require 'stringio'
 require 'pathname'
 require_relative 'config'
 require_relative 'client'
+require_relative 'command_handler'
 
 module OllamaRepl
   class Repl
+    # Make client and messages accessible to the CommandHandler
+    attr_reader :client, :messages
     MODE_LLM = :llm
     MODE_RUBY = :ruby
     MODE_SHELL = :shell
@@ -25,6 +28,7 @@ module OllamaRepl
       @client = Client.new(Config.ollama_host, Config.ollama_model)
       @messages = [] # Conversation history
       @mode = MODE_LLM
+      @command_handler = CommandHandler.new(self)
       setup_readline
     rescue Error => e # Catch configuration or initial connection errors
       puts "[Error] #{e.message}"
@@ -84,7 +88,29 @@ module OllamaRepl
       end
     end
 
-    private
+    # Make get_available_models public so CommandHandler can use it
+    def get_available_models(debug_enabled = false)
+      current_time = Time.now
+      
+      # Cache models for 5 minutes to avoid excessive API calls
+      if @available_models_cache.nil? || @last_cache_time.nil? ||
+         (current_time - @last_cache_time) > 300 # 5 minutes
+        
+        puts "Refreshing models cache" if debug_enabled
+        begin
+          @available_models_cache = @client.list_models.sort
+          @last_cache_time = current_time
+          puts "Cache updated with #{@available_models_cache.size} models" if debug_enabled
+        rescue => e
+          puts "Error fetching models: #{e.message}" if debug_enabled
+          @available_models_cache ||= []
+        end
+      else
+        puts "Using cached models (#{@available_models_cache.size})" if debug_enabled
+      end
+      
+      @available_models_cache
+    end
 
     def setup_readline
       # Cache for available models to improve performance
@@ -138,30 +164,6 @@ module OllamaRepl
       # Set the character that gets appended after completion
       Readline.completion_append_character = " "
     end
-    
-    # Helper method to get available models with caching
-    def get_available_models(debug_enabled = false)
-      current_time = Time.now
-      
-      # Cache models for 5 minutes to avoid excessive API calls
-      if @available_models_cache.nil? || @last_cache_time.nil? ||
-         (current_time - @last_cache_time) > 300 # 5 minutes
-        
-        puts "Refreshing models cache" if debug_enabled
-        begin
-          @available_models_cache = @client.list_models.sort
-          @last_cache_time = current_time
-          puts "Cache updated with #{@available_models_cache.size} models" if debug_enabled
-        rescue => e
-          puts "Error fetching models: #{e.message}" if debug_enabled
-          @available_models_cache ||= []
-        end
-      else
-        puts "Using cached models (#{@available_models_cache.size})" if debug_enabled
-      end
-      
-      @available_models_cache
-    end
 
     def current_prompt
       case @mode
@@ -180,7 +182,7 @@ module OllamaRepl
       return if input.empty?
 
       if input.start_with?('/')
-        handle_command(input)
+        @command_handler.handle(input) # Delegate to the command handler
       else
         case @mode
         when MODE_LLM
@@ -193,48 +195,8 @@ module OllamaRepl
       end
     end
 
-    def handle_command(input)
-      parts = input.split(' ', 2)
-      command = parts[0].downcase
-      args = parts[1]
-
-      case command
-      when '/llm'
-        if args && !args.empty?
-          handle_llm_input(args) # Single LLM prompt
-        else
-          switch_mode(MODE_LLM) # Switch durable mode
-        end
-      when '/ruby'
-        if args && !args.empty?
-          handle_ruby_input(args) # Single Ruby execution
-        else
-          switch_mode(MODE_RUBY) # Switch durable mode
-        end
-      when '/shell'
-        if args && !args.empty?
-          handle_shell_input(args) # Single Shell execution
-        else
-          switch_mode(MODE_SHELL) # Switch durable mode
-        end
-      when '/file'
-        handle_file_command(args)
-      when '/model'
-        handle_model_command(args)
-      when '/context'
-        display_context
-      when '/clear'
-        clear_context
-      when '/help'
-        display_help
-      when '/exit', '/quit'
-         # Handled in main loop, but included here for completeness
-         puts "Exiting."
-         exit 0
-      else
-        puts "Unknown command: #{command}. Type /help for available commands."
-      end
-    end
+    # The command handling methods have been moved to CommandHandler
+    # Keeping switch_mode and other support methods needed by CommandHandler
 
     def switch_mode(new_mode)
       @mode = new_mode
@@ -343,143 +305,13 @@ module OllamaRepl
       [stdout_capture.string, stderr_capture.string, error]
     end
 
-    def handle_file_command(args)
-      unless args && !args.empty?
-        puts "Usage: /file {file_path}"
-        return
-      end
-      file_path = File.expand_path(args)
-      unless File.exist?(file_path)
-        puts "Error: File not found: #{file_path}"
-        return
-      end
-      unless File.readable?(file_path)
-        puts "Error: Cannot read file (permission denied): #{file_path}"
-        return
-      end
-
-      begin
-        content = File.read(file_path)
-        extension = File.extname(file_path).downcase
-        lang = FILE_TYPE_MAP[extension] || '' # Get lang identifier or empty string
-
-        formatted_content = "System Message: File Content (#{File.basename(file_path)})\n"
-        formatted_content += "```#{lang}\n"
-        formatted_content += content
-        formatted_content += "\n```"
-
-        add_message('system', formatted_content)
-        puts "Added content from #{File.basename(file_path)} to context."
-
-      rescue StandardError => e
-        puts "Error reading file #{file_path}: #{e.message}"
-      end
-    end
-
-    def handle_model_command(args)
-      # Use our cached models for consistent behavior with tab completion
-      available_models = get_available_models
-
-      if args.nil? || args.empty?
-        # List models
-        if available_models.empty?
-            puts "No models available on the Ollama host."
-        else
-            puts "Available models:"
-            available_models.each { |m| puts "- #{m}" }
-            puts "\nCurrent model: #{@client.current_model}"
-            puts "\nTip: Type '/model' followed by at least 3 characters and press Tab for autocompletion"
-        end
-        return
-      end
-
-      # Set model
-      target_model = args.strip
-      exact_match = available_models.find { |m| m == target_model }
-      prefix_matches = available_models.select { |m| m.start_with?(target_model) }
-
-      chosen_model = nil
-      if exact_match
-        chosen_model = exact_match
-      elsif prefix_matches.length == 1
-        chosen_model = prefix_matches.first
-      elsif prefix_matches.length > 1
-        puts "Ambiguous model name '#{target_model}'. Matches:"
-        prefix_matches.each { |m| puts "- #{m}" }
-        return
-      else
-        puts "Model '#{target_model}' not found."
-        if available_models.any?
-          puts "Available models: #{available_models.join(', ')}"
-        end
-        return
-      end
-
-      if chosen_model
-        @client.update_model(chosen_model)
-        puts "Model set to '#{chosen_model}'."
-        # Optionally, clear context when changing model? Or inform user context is kept.
-        # puts "Conversation context remains."
-      end
-
-    rescue Client::ApiError => e
-       puts "[API Error managing models] #{e.message}"
-    end
-
-    def display_context
-      puts "\n--- Conversation Context ---"
-      if @messages.empty?
-        puts "(empty)"
-      else
-        @messages.each_with_index do |msg, index|
-          puts "[#{index + 1}] #{msg[:role].capitalize}:"
-          puts msg[:content]
-          puts "---"
-        end
-      end
-      puts "Total messages: #{@messages.length}"
-      puts "--------------------------\n"
-    end
-
-    def clear_context
-      print "Are you sure you want to clear the conversation history? (y/N): "
-      confirmation = $stdin.gets.chomp.downcase # Use $stdin here, not Readline
-      if confirmation == 'y'
-        @messages = []
-        puts "Conversation context cleared."
-      else
-        puts "Clear context cancelled."
-      end
-    end
-
-    def display_help
-      puts "\n--- Ollama REPL Help ---"
-      puts "Modes:"
-      puts "  /llm           Switch to durable LLM interaction mode (default)."
-      puts "  /ruby          Switch to durable Ruby execution mode."
-      puts "  /shell         Switch to durable Shell execution mode."
-      puts
-
-      puts "One-off Actions (stay in current durable mode):"
-      puts "  /llm {prompt}  Send a single prompt to the LLM."
-      puts "  /ruby {code}   Execute a single line of Ruby code."
-      puts "  /shell {command} Execute a single shell command."
-      puts
-
-      puts "Commands:"
-      puts "  /file {path}   Add the content of the specified file to the context."
-      puts "  /model         List available Ollama models."
-      puts "  /model {name}  Switch to the specified Ollama model (allows prefix matching)."
-      puts "                 Type at least 3 characters after '/model ' and press Tab for autocompletion."
-      puts "  /context       Display the current conversation context."
-      puts "  /clear         Clear the conversation context (asks confirmation)."
-      puts "  /help          Show this help message."
-      puts "  /exit, /quit   Exit the REPL."
-      puts "  Ctrl+C         Interrupt current action (or show exit hint)."
-      puts "  Ctrl+D         Exit the REPL (at empty prompt)."
-      puts "------------------------\n"
-    end
-
+    # The following methods have been moved to CommandHandler:
+    # - handle_file_command
+    # - handle_model_command
+    # - display_context
+    # - clear_context
+    # - display_help
+    
     def handle_shell_input(command)
       puts "❯ Executing..."
       add_message('user', "Execute shell command: ```\n#{command}\n```") # Add code to context first
@@ -506,9 +338,10 @@ module OllamaRepl
       puts "--- STDERR ---"
       puts stderr_str.empty? ? "(empty)" : stderr_str
       puts "--------------"
-
       add_message('system', output_message)
     end
+
+    private
 
     def capture_shell_execution(command)
       stdout_str = ""
