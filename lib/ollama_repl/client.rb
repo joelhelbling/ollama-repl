@@ -8,6 +8,15 @@ require 'uri'
 module OllamaRepl
   class Client
     class ApiError < StandardError; end
+    # Define a specific error for when the model isn't found
+    class ModelNotFoundError < StandardError
+      attr_reader :available_models
+
+      def initialize(message, available_models)
+        super(message)
+        @available_models = available_models
+      end
+    end
 
     def initialize(host, model)
       @host = host
@@ -17,6 +26,8 @@ module OllamaRepl
         faraday.request :json # Send request body as JSON
         faraday.response :json, content_type: /\bjson$/ # Parse JSON response bodies
         faraday.response :raise_error # Raise errors on 4xx/5xx responses
+        faraday.options.open_timeout = 10 # seconds to establish connection
+        faraday.options.timeout = 60    # seconds to wait for response
       end
     end
 
@@ -87,14 +98,24 @@ module OllamaRepl
     # Check if the API host is reachable and the model exists
     def check_connection_and_model
       # 1. Check connection by listing models (lightweight)
-      list_models
+      available = list_models # Store the list
       # 2. Check if the specific model exists
-      unless list_models.include?(@model)
-        raise Error, "Error: Configured model '#{@model}' not found on Ollama host '#{@host}'. Available models: #{list_models.join(', ')}"
+      unless available.include?(@model)
+        # Raise the specific error with the list
+        raise ModelNotFoundError.new(
+          "Configured model '#{@model}' not found on Ollama host '#{@host}'.",
+          available
+        )
       end
       true
     rescue ApiError => e
+      # Log the original error details for more debugging info
+      puts "[Debug] Raw connection ApiError: #{e.inspect}" if ENV['DEBUG']
       raise Error, "Error connecting to Ollama at #{@host}: #{e.message}"
+    rescue Faraday::ConnectionFailed => e
+      # Catch specific connection errors for better logging
+      puts "[Debug] Raw Faraday::ConnectionFailed: #{e.inspect}" if ENV['DEBUG']
+      raise Error, "Error connecting to Ollama at #{@host}: Connection failed - #{e.message}"
     end
   end
 end

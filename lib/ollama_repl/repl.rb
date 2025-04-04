@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 require 'open3'
-
 require 'readline'
 require 'stringio'
 require 'pathname'
@@ -43,7 +42,13 @@ module OllamaRepl
       # Check initial connection and model validity
       begin
         @client.check_connection_and_model
-      rescue Error => e
+      rescue Client::ModelNotFoundError => e
+        # Handle the specific case where the configured model is not found
+        puts "[Error] #{e.message}" # The error message already explains the model wasn't found
+        puts "Available models: #{e.available_models.join(', ')}"
+        puts "Please select an available model using the command: /model {model_name}"
+        # Do not exit here, allow the user to change the model
+      rescue Error => e # Catch other connection/config errors
         puts "[Error] #{e.message}"
         puts "Please check your OLLAMA_HOST and OLLAMA_MODEL settings and ensure Ollama is running."
         exit 1
