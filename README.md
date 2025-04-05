@@ -179,9 +179,27 @@ Here's how you can use the integrated modes for a seamless development experienc
 | `/help` | Show the help message |
 | `/exit`, `/quit` | Exit the REPL |
 
+## 🗺️ Roadmap
+
+This thing is _arguably useful as entertainment_, but really not ready for prime time yet.  Here are some things that need to be done:
+
+### short term goals
+- Run subsequent ruby commands in the same process (e.g. the way `irb` or `pry` do).  Currently each `/ruby` snippet runs in a new process with no knowledge of entities created in prior snippets.
+- List loaded files in a status above each input prompt so you know what you're dealing with.  Those files are in the LLM context, sure, but users need context too.
+- format the LLM's markdown in something nice for a terminal.  Too many asterisks just isn't a great experience
+- format Ruby code to look good.  C'mon, we've had this since we stopped coding in notepad.exe!
+- choose a better name.  I'm not gonna say this name was _vibe coded_, but, ok, yeah, it an AI made up this name.  Finally, we found one thing they're not good at.
+
+### longer term goals
+- Better context management.  It's all about the tokens, y'all.  Too many of 'em flying around.  Currently the `ContextManager` is _really_ simplistic (it just endlessly appends each message, no summarizing or editing), but, hey, it's an empty vessel, ready to be inhabited by something smarter.
+- Better prompting!  As in, like, _any_ prompting!  Currently it's 100% BYO prompt, with no pre-prompt to shape and direct this unique experience.  Getting this right will pretty much make or break this thing.
+- MCP all the things!  Because it would be cool, and also, it's currently the right thing to do.  Should be pluggable somehow, so that we'll never really be able to know all the amazing stuff folks are doing with this thing.
+
+I know what you're wondering.  _"What about Deepseek/Claude/Gemini/Sam Altman?"_  Well, no.  If we make this work with awesome AIs, will we ever bother to make it work great with Ollama models?  It's bad enough burning through API $$$ just to _make_ this thing.  Opensource is the future.  C'mon, you feel it too, don't you?
+
 ## 🛠️ Contributing
 
-Contributions are welcome! Here's how you can help improve OllamaRepl:
+If you're still reading, then I'm getting excited because...Contributions are welcome! Here's how you can help improve OllamaRepl:
 
 ### Development Setup
 
