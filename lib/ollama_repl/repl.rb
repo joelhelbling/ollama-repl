@@ -52,51 +52,12 @@ module OllamaRepl
     end
 
     def run
-      @io_service.display("Welcome to Ollama REPL!")
-      @io_service.display("Using model: #{@client.current_model}")
-      @io_service.display("Type `/help` for commands.")
+      display_welcome_message
+      check_initial_connection
 
-      # Pre-cache available models
-      get_available_models
-
-      # Check initial connection and model validity
-      begin
-        @client.check_connection_and_model
-      rescue Client::ModelNotFoundError => e
-        # Handle the specific case where the configured model is not found
-        handle_model_not_found_error(e)
-      rescue Error => e # Catch other connection/config errors
-        @io_service.display_error(e.message)
-        @io_service.display("Please check your OLLAMA_HOST and OLLAMA_MODEL settings and ensure Ollama is running.")
-        exit 1
-      end
-
-      loop do
-        prompt = current_prompt
-        input = @io_service.prompt(prompt)
-
-        # Handle Ctrl+D (EOF) or empty input gracefully
-        if input.nil?
-          @io_service.display("\nExiting.")
-          break
-        end
-
-        input.strip!
-
-        # Add non-empty input to history (filter out commands for history clarity if desired)
-        Readline::HISTORY.push(input) unless input.empty?
-
-        # Exit commands
-        break if ["/exit", "/quit"].include?(input.downcase)
-
-        process_input(input)
-      rescue Interrupt # Handle Ctrl+C
-        @io_service.display("\nType /exit or /quit to leave.")
-      rescue Client::ApiError => e
-        @io_service.display_api_error(e.message)
-      rescue => e
-        @io_service.display_execution_error("general", e)
-      end
+      main_loop
+    rescue Error => e # Catch connection/config errors
+      handle_fatal_error(e)
     end
 
     # Delegate to model cache service
@@ -183,13 +144,11 @@ module OllamaRepl
     # Switches the durable REPL mode.
     # @param mode_type [Symbol] The type of mode to switch to (e.g., :llm, :ruby, :shell)
     def switch_mode(mode_type)
-      begin
-        @current_mode = @mode_factory.create(mode_type)
-        mode_name = @current_mode.class.name.split("::").last.gsub("Mode", "")
-        @io_service.display("Switched to #{mode_name} mode.")
-      rescue ArgumentError => e
-        @io_service.display_error(e.message)
-      end
+      @current_mode = @mode_factory.create(mode_type)
+      mode_name = @current_mode.class.name.split("::").last.gsub("Mode", "")
+      @io_service.display("Switched to #{mode_name} mode.")
+    rescue ArgumentError => e
+      @io_service.display_error(e.message)
     end
 
     # Executes a given input in a specific mode temporarily, without changing the durable mode.
@@ -197,14 +156,12 @@ module OllamaRepl
     # @param mode_type [Symbol] The type of mode to execute in (e.g., :llm, :ruby, :shell)
     # @param input [String] The input string to handle in the specified mode.
     def run_in_mode(mode_type, input)
-      begin
-        mode_instance = @mode_factory.create(mode_type)
-        mode_instance.handle_input(input)
-      rescue ArgumentError => e
-        @io_service.display_error(e.message)
-      rescue => e
-        @io_service.display_execution_error(mode_type.to_s, e)
-      end
+      mode_instance = @mode_factory.create(mode_type)
+      mode_instance.handle_input(input)
+    rescue ArgumentError => e
+      @io_service.display_error(e.message)
+    rescue => e
+      @io_service.display_execution_error(mode_type.to_s, e)
     end
 
     # Public method still needed by CommandHandler for /file command
@@ -219,6 +176,62 @@ module OllamaRepl
 
     # Private methods below (if any were previously defined)
     private
+
+    def display_welcome_message
+      @io_service.display("Welcome to Ollama REPL!")
+      @io_service.display("Using model: #{@client.current_model}")
+      @io_service.display("Type `/help` for commands.")
+
+      # Pre-cache available models
+      get_available_models
+    end
+
+    def check_initial_connection
+      @client.check_connection_and_model
+    rescue Client::ModelNotFoundError => e
+      handle_model_not_found_error(e)
+    end
+
+    def main_loop
+      loop do
+        result = handle_input_iteration
+        break if result == :exit
+      rescue Interrupt # Handle Ctrl+C
+        @io_service.display("\nType /exit or /quit to leave.")
+      rescue Client::ApiError => e
+        @io_service.display_api_error(e.message)
+      rescue => e
+        @io_service.display_execution_error("general", e)
+      end
+    end
+
+    def handle_input_iteration
+      prompt = current_prompt
+      input = @io_service.prompt(prompt)
+
+      # Handle EOF or nil input (Ctrl+D)
+      if input.nil?
+        @io_service.display("\nExiting.")
+        return :exit
+      end
+
+      input.strip!
+
+      # Add non-empty input to history
+      Readline::HISTORY.push(input) unless input.empty?
+
+      # Exit commands
+      return :exit if ["/exit", "/quit"].include?(input.downcase)
+
+      process_input(input)
+      :continue
+    end
+
+    def handle_fatal_error(error)
+      @io_service.display_error(error.message)
+      @io_service.display("Please check your OLLAMA_HOST and OLLAMA_MODEL settings and ensure Ollama is running.")
+      exit 1
+    end
 
     # setup_readline remains private implicitly
     # get_available_models was made public, keep it that way for CommandHandler
