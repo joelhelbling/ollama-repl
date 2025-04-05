@@ -16,6 +16,7 @@ require 'faraday/net_http'
 require_relative "ollama_repl/version"
 require_relative "ollama_repl/config"
 require_relative "ollama_repl/client"
+require_relative "ollama_repl/model_cache_service"
 require_relative "ollama_repl/repl"
 
 module OllamaRepl

@@ -5,6 +5,7 @@ require 'stringio'
 require 'pathname'
 require_relative 'config'
 require_relative 'client'
+require_relative 'model_cache_service'
 require_relative 'command_handler'
 require_relative 'context_manager'
 require_relative 'modes/mode' # Base mode
@@ -30,6 +31,8 @@ module OllamaRepl
       Config.validate_config!
       @client = Client.new(Config.ollama_host, Config.ollama_model)
       @context_manager = ContextManager.new
+      # Create model cache service
+      @model_cache_service = ModelCacheService.new(@client)
       # Initialize the starting mode object
       @current_mode = Modes::LlmMode.new(@client, @context_manager)
       @command_handler = CommandHandler.new(self, @context_manager)
@@ -92,34 +95,13 @@ module OllamaRepl
       end
     end
 
-    # Make get_available_models public so CommandHandler can use it
+    # Delegate to model cache service
     def get_available_models(debug_enabled = false)
-      current_time = Time.now
-      
-      # Cache models for 5 minutes to avoid excessive API calls
-      if @available_models_cache.nil? || @last_cache_time.nil? ||
-         (current_time - @last_cache_time) > 300 # 5 minutes
-        
-        puts "Refreshing models cache" if debug_enabled
-        begin
-          @available_models_cache = @client.list_models.sort
-          @last_cache_time = current_time
-          puts "Cache updated with #{@available_models_cache.size} models" if debug_enabled
-        rescue => e
-          puts "Error fetching models: #{e.message}" if debug_enabled
-          @available_models_cache ||= []
-        end
-      else
-        puts "Using cached models (#{@available_models_cache.size})" if debug_enabled
-      end
-      
-      @available_models_cache
+      @model_cache_service.get_models(debug_enabled: debug_enabled)
     end
 
     def setup_readline
-      # Cache for available models to improve performance
-      @available_models_cache = nil
-      @last_cache_time = nil
+      # No longer need to initialize model cache variables here
       
       Readline.completion_proc = proc do |input|
         # Don't log anything by default to avoid interfering with the UI

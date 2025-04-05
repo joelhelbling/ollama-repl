@@ -14,6 +14,11 @@ RSpec.describe OllamaRepl::Repl do
     allow(@client).to receive(:check_connection_and_model).and_return(true)
     allow(@client).to receive(:list_models).and_return(["llama3", "llama2"])
     
+    # Mock ModelCacheService
+    @model_cache_service = instance_double("OllamaRepl::ModelCacheService")
+    allow(OllamaRepl::ModelCacheService).to receive(:new).and_return(@model_cache_service)
+    allow(@model_cache_service).to receive(:get_models).and_return(["llama3", "llama2"])
+    
     # Mock Readline to avoid terminal interaction
     allow(Readline).to receive(:readline).and_return("test input", nil)
     allow(Readline::HISTORY).to receive(:push)
@@ -81,16 +86,12 @@ RSpec.describe OllamaRepl::Repl do
   end
   
   describe "#get_available_models" do
-    it "fetches and caches models" do
-      expect(@client).to receive(:list_models).once.and_return(["llama3", "llama2"])
+    it "delegates to the model cache service" do
+      # Expect delegation with correct parameters
+      expect(@model_cache_service).to receive(:get_models).with(debug_enabled: true).and_return(["llama3", "llama2"])
       
-      # First call should fetch from API
-      models1 = repl.get_available_models
-      expect(models1).to match_array(["llama3", "llama2"])
-      
-      # Second call should use cache
-      models2 = repl.get_available_models
-      expect(models2).to match_array(["llama3", "llama2"])
+      result = repl.get_available_models(true)
+      expect(result).to eq(["llama3", "llama2"])
     end
   end
   
