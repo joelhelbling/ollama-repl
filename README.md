@@ -186,6 +186,7 @@ This thing is _arguably useful as entertainment_, but really not ready for prime
 ### short term goals
 - Run subsequent ruby commands in the same process (e.g. the way `irb` or `pry` do).  Currently each `/ruby` snippet runs in a new process with no knowledge of entities created in prior snippets.
 - List loaded files in a status above each input prompt so you know what you're dealing with.  Those files are in the LLM context, sure, but users need context too.
+- While we're at it, how about displaying the number of tokens in the context (chat history)?
 - format the LLM's markdown in something nice for a terminal.  Too many asterisks just isn't a great experience
 - format Ruby code to look good.  C'mon, we've had this since we stopped coding in notepad.exe!
 - choose a better name.  I'm not gonna say this name was _vibe coded_, but, ok, yeah, it an AI made up this name.  Finally, we found one thing they're not good at.
