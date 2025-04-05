@@ -7,14 +7,16 @@ require_relative 'config'
 require_relative 'client'
 require_relative 'command_handler'
 require_relative 'context_manager'
+require_relative 'modes/mode' # Base mode
+require_relative 'modes/llm_mode'
+require_relative 'modes/ruby_mode'
+require_relative 'modes/shell_mode'
 
 module OllamaRepl
   class Repl
     # Make client and context_manager accessible to the CommandHandler
     attr_reader :client, :context_manager
-    MODE_LLM = :llm
-    MODE_RUBY = :ruby
-    MODE_SHELL = :shell
+    # Mode constants removed, using symbols like :llm, :ruby, :shell
 
     FILE_TYPE_MAP = {
       '.rb' => 'ruby', '.js' => 'javascript', '.py' => 'python', '.java' => 'java',
@@ -28,7 +30,8 @@ module OllamaRepl
       Config.validate_config!
       @client = Client.new(Config.ollama_host, Config.ollama_model)
       @context_manager = ContextManager.new
-      @mode = MODE_LLM
+      # Initialize the starting mode object
+      @current_mode = Modes::LlmMode.new(@client, @context_manager)
       @command_handler = CommandHandler.new(self, @context_manager)
       setup_readline
     rescue Error => e # Catch configuration or initial connection errors
@@ -166,200 +169,82 @@ module OllamaRepl
       Readline.completion_append_character = " "
     end
 
+    # Delegates prompt generation to the current mode object.
     def current_prompt
-      case @mode
-      when MODE_LLM
-        "🤖 ❯ "
-      when MODE_RUBY
-        "💎 ❯ "
-      when MODE_SHELL
-        "🐚 ❯ "
-      else
-        "?! ❯ "
-      end
+      @current_mode.prompt
     end
 
     def process_input(input)
       return if input.empty?
 
       if input.start_with?('/')
-        @command_handler.handle(input) # Delegate to the command handler
+        @command_handler.handle(input) # Delegate commands
       else
-        case @mode
-        when MODE_LLM
-          handle_llm_input(input)
-        when MODE_RUBY
-          handle_ruby_input(input)
-        when MODE_SHELL
-          handle_shell_input(input)
-        end
+        # Delegate non-command input to the current mode object
+        @current_mode.handle_input(input)
       end
     end
 
     # The command handling methods have been moved to CommandHandler
     # Keeping switch_mode and other support methods needed by CommandHandler
 
-    def switch_mode(new_mode)
-      @mode = new_mode
-      mode_name = case new_mode
-                  when MODE_LLM
-                    "LLM"
-                  when MODE_RUBY
-                    "Ruby"
-                  when MODE_SHELL
-                    "Shell"
-                  else
-                    "Unknown"
-                  end
+    # Switches the durable REPL mode.
+    # @param mode_type [Symbol] The type of mode to switch to (e.g., :llm, :ruby, :shell)
+    def switch_mode(mode_type)
+      new_mode_instance = case mode_type
+                          when :llm
+                            Modes::LlmMode.new(@client, @context_manager)
+                          when :ruby
+                            Modes::RubyMode.new(@client, @context_manager)
+                          when :shell
+                            Modes::ShellMode.new(@client, @context_manager)
+                          else
+                            puts "Error: Unknown mode type '#{mode_type}'"
+                            return # Don't switch if mode is unknown
+                          end
+
+      @current_mode = new_mode_instance
+      # Use the new mode's prompt to get the name implicitly
+      mode_name = @current_mode.class.name.split('::').last.gsub('Mode', '')
       puts "Switched to #{mode_name} mode."
     end
 
+    # Executes a given input in a specific mode temporarily, without changing the durable mode.
+    # Used for one-off commands like `/ruby {code}`.
+    # @param mode_type [Symbol] The type of mode to execute in (e.g., :llm, :ruby, :shell)
+    # @param input [String] The input string to handle in the specified mode.
+    def run_in_mode(mode_type, input)
+      mode_instance = case mode_type
+                      when :llm
+                        Modes::LlmMode.new(@client, @context_manager)
+                      when :ruby
+                        Modes::RubyMode.new(@client, @context_manager)
+                      when :shell
+                        Modes::ShellMode.new(@client, @context_manager)
+                      else
+                        puts "Error: Cannot run in unknown mode type '#{mode_type}'"
+                        return
+                      end
+      mode_instance.handle_input(input)
+    rescue StandardError => e # Catch errors during temporary execution
+        puts "[Unexpected Error during one-off execution in #{mode_type} mode] #{e.class}: #{e.message}"
+        puts e.backtrace.join("\n") if ENV['DEBUG']
+    end
+
+    # Public method still needed by CommandHandler for /file command
+    # Consider refactoring CommandHandler later to use ContextManager directly if appropriate.
     def add_message(role, content)
       @context_manager.add(role, content)
     end
 
-    def handle_llm_input(prompt)
-      add_message('user', prompt)
-      full_response = String.new # Use String.new to ensure mutability
-      print "\nAssistant: " # Print prefix once
+    # Old handle_llm_input, handle_ruby_input, handle_shell_input,
+    # capture_ruby_execution, and capture_shell_execution methods
+    # are removed as their logic is now within the respective Mode classes.
 
-      begin
-        @client.chat(@context_manager.for_api) do |chunk|
-          # Extract content from the message part of the chunk
-          content_part = chunk.dig('message', 'content')
-          unless content_part.nil? || content_part.empty?
-            print content_part # Stream output directly to the console
-            $stdout.flush # Ensure it appears immediately
-            full_response << content_part
-          end
-
-          # Check if the stream is done (Ollama specific field)
-          # if chunk['done']
-          #   # Optional: Handle end-of-stream logic if needed,
-          #   # like printing final stats if provided in the chunk.
-          # end
-        end
-        puts "" # Add a final newline after streaming is complete
-
-        # Add the complete response to history *after* streaming finishes
-        add_message('assistant', full_response) unless full_response.empty?
-
-      rescue Client::ApiError => e
-        puts "\n[API Error interacting with LLM] #{e.message}"
-        # Optionally remove the user message that failed
-        # @messages.pop if @messages.last&.dig(:role) == 'user'
-      ensure
-        # Ensure a newline even if there was an error during streaming
-        puts "" unless full_response.empty?
-      end
-    end
-
-    def handle_ruby_input(code)
-      puts "💎 Executing..."
-      add_message('user', "Execute Ruby code: ```ruby\n#{code}\n```") # Add code to context first
-
-      stdout_str, stderr_str, error = capture_ruby_execution(code)
-
-      output_message = "System Message: Ruby Execution Output\n"
-      output_message += "STDOUT:\n"
-      output_message += stdout_str.empty? ? "(empty)\n" : stdout_str
-      output_message += "STDERR:\n"
-      output_message += stderr_str.empty? ? "(empty)\n" : stderr_str
-
-      if error
-        error_details = "Error: #{error.class}: #{error.message}\nBacktrace:\n#{error.backtrace.join("\n")}"
-        output_message += "Exception:\n#{error_details}"
-        puts "[Ruby Execution Error]"
-        puts error_details
-      else
-        puts "[Ruby Execution Result]"
-      end
-
-      puts "--- STDOUT ---"
-      puts stdout_str.empty? ? "(empty)" : stdout_str
-      puts "--- STDERR ---"
-      puts stderr_str.empty? ? "(empty)" : stderr_str
-      puts "--------------"
-
-      add_message('system', output_message)
-    end
-
-    def capture_ruby_execution(code)
-      original_stdout = $stdout
-      original_stderr = $stderr
-      stdout_capture = StringIO.new
-      stderr_capture = StringIO.new
-      $stdout = stdout_capture
-      $stderr = stderr_capture
-      error = nil
-
-      begin
-        # Using Kernel#eval directly. Be cautious.
-        eval(code, binding) # Use current binding or create a clean one if needed
-      rescue Exception => e # Catch StandardError and descendants
-        error = e
-      ensure
-        $stdout = original_stdout
-        $stderr = original_stderr
-      end
-
-      [stdout_capture.string, stderr_capture.string, error]
-    end
-
-    # The following methods have been moved to CommandHandler:
-    # - handle_file_command
-    # - handle_model_command
-    # - display_context
-    # - clear_context
-    # - display_help
-    
-    def handle_shell_input(command)
-      puts "❯ Executing..."
-      add_message('user', "Execute shell command: ```\n#{command}\n```") # Add code to context first
-
-      stdout_str, stderr_str, error = capture_shell_execution(command)
-
-      output_message = "System Message: Shell Execution Output\n"
-      output_message += "STDOUT:\n"
-      output_message += stdout_str.empty? ? "(empty)\n" : stdout_str
-      output_message += "STDERR:\n"
-      output_message += stderr_str.empty? ? "(empty)\n" : stderr_str
-
-      if error
-        error_details = "Error: #{error.class}: #{error.message}\nBacktrace:\n#{error.backtrace.join("\n")}"
-        output_message += "Exception:\n#{error_details}"
-        puts "[Shell Execution Error]"
-        puts error_details
-      else
-        puts "[Shell Execution Result]"
-      end
-
-      puts "--- STDOUT ---"
-      puts stdout_str.empty? ? "(empty)" : stdout_str
-      puts "--- STDERR ---"
-      puts stderr_str.empty? ? "(empty)" : stderr_str
-      puts "--------------"
-      add_message('system', output_message)
-    end
-
+    # Private methods below (if any were previously defined)
     private
 
-    def capture_shell_execution(command)
-      stdout_str = ""
-      stderr_str = ""
-      error = nil
-
-      begin
-        # Execute the command and capture stdout and stderr
-        stdout_str, stderr_str, status = Open3.capture3(command)
-        if !status.success?
-          stderr_str += "Command exited with status: #{status.exitstatus}"
-        end
-      rescue StandardError => e
-        error = e
-      end
-
-      [stdout_str, stderr_str, error]
-    end
+    # setup_readline remains private implicitly
+    # get_available_models was made public, keep it that way for CommandHandler
   end
 end

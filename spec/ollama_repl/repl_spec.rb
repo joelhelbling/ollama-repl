@@ -45,10 +45,10 @@ RSpec.describe OllamaRepl::Repl do
     end
     
     it "returns different prompts based on mode" do
-      repl.switch_mode(OllamaRepl::Repl::MODE_RUBY)
+      repl.switch_mode(:ruby)
       expect(repl.current_prompt).to eq("💎 ❯ ")
       
-      repl.switch_mode(OllamaRepl::Repl::MODE_SHELL)
+      repl.switch_mode(:shell)
       expect(repl.current_prompt).to eq("🐚 ❯ ")
     end
   end
@@ -56,7 +56,7 @@ RSpec.describe OllamaRepl::Repl do
   describe "#switch_mode" do
     it "changes the current mode" do
       original_prompt = repl.current_prompt
-      repl.switch_mode(OllamaRepl::Repl::MODE_RUBY)
+      repl.switch_mode(:ruby)
       expect(repl.current_prompt).not_to eq(original_prompt)
     end
   end
@@ -94,45 +94,6 @@ RSpec.describe OllamaRepl::Repl do
     end
   end
   
-  # Test specific methods without running the full REPL
-  describe "#handle_llm_input" do
-    before do
-      allow(@client).to receive(:chat) do |messages, &block|
-        block.call({'message' => {'role' => 'assistant', 'content' => 'Hello'}, 'done' => false})
-        block.call({'message' => {'role' => 'assistant', 'content' => ' there!'}, 'done' => true})
-      end
-    end
-    
-    it "processes input and adds to context" do
-      expect(repl.context_manager).to receive(:add).with("user", "Hello")
-      expect(repl.context_manager).to receive(:add).with("assistant", "Hello there!")
-      
-      repl.handle_llm_input("Hello")
-    end
-  end
-  
-  describe "#capture_ruby_execution" do
-    it "captures stdout and stderr" do
-      stdout, stderr, error = repl.send(:capture_ruby_execution, 'puts "Hello"; $stderr.puts "Error"')
-      expect(stdout).to include("Hello")
-      expect(stderr).to include("Error")
-      expect(error).to be_nil
-    end
-    
-    it "captures exceptions" do
-      stdout, stderr, error = repl.send(:capture_ruby_execution, 'raise "Test error"')
-      expect(stdout).to eq("")
-      expect(stderr).to eq("")
-      expect(error).to be_a(RuntimeError)
-      expect(error.message).to eq("Test error")
-    end
-  end
-  
-  describe "#capture_shell_execution" do
-    it "captures command output and errors" do
-      # This is a private method, so we need to use send
-      stdout, stderr, error = repl.send(:capture_shell_execution, 'echo "test"')
-      expect(stdout).to include("test")
-    end
-  end
+  # The tests for methods that have been moved to mode classes are removed
+  # This includes handle_llm_input, capture_ruby_execution, and capture_shell_execution
 end

@@ -9,9 +9,7 @@ RSpec.describe OllamaRepl::CommandHandler do
     before do
       # Set up the necessary mocks for the REPL instance
       allow(repl).to receive(:client).and_return(double("OllamaRepl::Client"))
-      allow(repl).to receive(:handle_llm_input)
-      allow(repl).to receive(:handle_ruby_input)
-      allow(repl).to receive(:handle_shell_input)
+      allow(repl).to receive(:run_in_mode)
       allow(repl).to receive(:switch_mode)
       allow(repl).to receive(:add_message)
       allow(repl).to receive(:get_available_models).and_return(["llama3", "llama2"])
@@ -19,36 +17,36 @@ RSpec.describe OllamaRepl::CommandHandler do
     
     context "with /llm command" do
       it "switches to LLM mode when no args" do
-        expect(repl).to receive(:switch_mode).with(OllamaRepl::Repl::MODE_LLM)
+        expect(repl).to receive(:switch_mode).with(:llm)
         command_handler.handle("/llm")
       end
       
       it "sends a single LLM prompt when args are provided" do
-        expect(repl).to receive(:handle_llm_input).with("Hello")
+        expect(repl).to receive(:run_in_mode).with(:llm, "Hello")
         command_handler.handle("/llm Hello")
       end
     end
     
     context "with /ruby command" do
       it "switches to Ruby mode when no args" do
-        expect(repl).to receive(:switch_mode).with(OllamaRepl::Repl::MODE_RUBY)
+        expect(repl).to receive(:switch_mode).with(:ruby)
         command_handler.handle("/ruby")
       end
       
       it "executes a single Ruby code when args are provided" do
-        expect(repl).to receive(:handle_ruby_input).with("puts 'Hello'")
+        expect(repl).to receive(:run_in_mode).with(:ruby, "puts 'Hello'")
         command_handler.handle("/ruby puts 'Hello'")
       end
     end
     
     context "with /shell command" do
       it "switches to Shell mode when no args" do
-        expect(repl).to receive(:switch_mode).with(OllamaRepl::Repl::MODE_SHELL)
+        expect(repl).to receive(:switch_mode).with(:shell)
         command_handler.handle("/shell")
       end
       
       it "executes a single shell command when args are provided" do
-        expect(repl).to receive(:handle_shell_input).with("ls -la")
+        expect(repl).to receive(:run_in_mode).with(:shell, "ls -la")
         command_handler.handle("/shell ls -la")
       end
     end

@@ -50,25 +50,25 @@ module OllamaRepl
 
     def handle_llm_command(args)
       if args && !args.empty?
-        @repl.handle_llm_input(args) # Single LLM prompt
+        @repl.run_in_mode(:llm, args) # Use run_in_mode for one-off execution
       else
-        @repl.switch_mode(Repl::MODE_LLM) # Switch durable mode
+        @repl.switch_mode(:llm) # Use symbol for durable mode switch
       end
     end
 
     def handle_ruby_command(args)
       if args && !args.empty?
-        @repl.handle_ruby_input(args) # Single Ruby execution
+        @repl.run_in_mode(:ruby, args) # Use run_in_mode for one-off execution
       else
-        @repl.switch_mode(Repl::MODE_RUBY) # Switch durable mode
+        @repl.switch_mode(:ruby) # Use symbol for durable mode switch
       end
     end
 
     def handle_shell_command(args)
       if args && !args.empty?
-        @repl.handle_shell_input(args) # Single Shell execution
+        @repl.run_in_mode(:shell, args) # Use run_in_mode for one-off execution
       else
-        @repl.switch_mode(Repl::MODE_SHELL) # Switch durable mode
+        @repl.switch_mode(:shell) # Use symbol for durable mode switch
       end
     end
 
@@ -90,7 +90,8 @@ module OllamaRepl
       begin
         content = File.read(file_path)
         extension = File.extname(file_path).downcase
-        lang = Repl::FILE_TYPE_MAP[extension] || '' # Get lang identifier or empty string
+        # Access constant via the class name now that Repl instance doesn't define MODE_* constants
+        lang = OllamaRepl::Repl::FILE_TYPE_MAP[extension] || '' # Get lang identifier or empty string
 
         formatted_content = "System Message: File Content (#{File.basename(file_path)})\n"
         formatted_content += "```#{lang}\n"
