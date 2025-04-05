@@ -4,8 +4,9 @@ require 'pathname' # For File operations in handle_file_command
 
 module OllamaRepl
   class CommandHandler
-    def initialize(repl)
+    def initialize(repl, context_manager)
       @repl = repl
+      @context_manager = context_manager
     end
 
     # Handles command input (e.g., "/help", "/model llama3")
@@ -157,16 +158,16 @@ module OllamaRepl
 
     def display_context
       puts "\n--- Conversation Context ---"
-      if @repl.messages.empty?
+      if @context_manager.empty?
         puts "(empty)"
       else
-        @repl.messages.each_with_index do |msg, index|
+        @context_manager.all.each_with_index do |msg, index|
           puts "[#{index + 1}] #{msg[:role].capitalize}:"
           puts msg[:content]
           puts "---"
         end
       end
-      puts "Total messages: #{@repl.messages.length}"
+      puts "Total messages: #{@context_manager.length}"
       puts "--------------------------\n"
     end
 
@@ -174,7 +175,7 @@ module OllamaRepl
       print "Are you sure you want to clear the conversation history? (y/N): "
       confirmation = $stdin.gets.chomp.downcase # Use $stdin here, not Readline
       if confirmation == 'y'
-        @repl.messages.replace([]) # Replace with empty array to match original behavior
+        @context_manager.clear
         puts "Conversation context cleared."
       else
         puts "Clear context cancelled."

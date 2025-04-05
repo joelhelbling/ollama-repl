@@ -6,11 +6,12 @@ require 'pathname'
 require_relative 'config'
 require_relative 'client'
 require_relative 'command_handler'
+require_relative 'context_manager'
 
 module OllamaRepl
   class Repl
-    # Make client and messages accessible to the CommandHandler
-    attr_reader :client, :messages
+    # Make client and context_manager accessible to the CommandHandler
+    attr_reader :client, :context_manager
     MODE_LLM = :llm
     MODE_RUBY = :ruby
     MODE_SHELL = :shell
@@ -26,9 +27,9 @@ module OllamaRepl
     def initialize
       Config.validate_config!
       @client = Client.new(Config.ollama_host, Config.ollama_model)
-      @messages = [] # Conversation history
+      @context_manager = ContextManager.new
       @mode = MODE_LLM
-      @command_handler = CommandHandler.new(self)
+      @command_handler = CommandHandler.new(self, @context_manager)
       setup_readline
     rescue Error => e # Catch configuration or initial connection errors
       puts "[Error] #{e.message}"
@@ -214,7 +215,7 @@ module OllamaRepl
     end
 
     def add_message(role, content)
-      @messages << { role: role, content: content }
+      @context_manager.add(role, content)
     end
 
     def handle_llm_input(prompt)
@@ -223,7 +224,7 @@ module OllamaRepl
       print "\nAssistant: " # Print prefix once
 
       begin
-        @client.chat(@messages) do |chunk|
+        @client.chat(@context_manager.for_api) do |chunk|
           # Extract content from the message part of the chunk
           content_part = chunk.dig('message', 'content')
           unless content_part.nil? || content_part.empty?
