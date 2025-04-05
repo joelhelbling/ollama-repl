@@ -10,6 +10,7 @@ require_relative "model_cache_service"
 require_relative "command_handler"
 require_relative "context_manager"
 require_relative "io_service"
+require_relative "mode_factory"
 require_relative "modes/mode" # Base mode
 require_relative "modes/llm_mode"
 require_relative "modes/ruby_mode"
@@ -35,9 +36,10 @@ module OllamaRepl
       @context_manager = dependencies[:context_manager] || ContextManager.new
       @io_service = dependencies[:io_service] || IOService.new
       @model_cache_service = dependencies[:model_cache_service] || ModelCacheService.new(@client)
+      @mode_factory = dependencies[:mode_factory] || ModeFactory.new(@client, @context_manager)
 
       # Initialize the starting mode object
-      @current_mode = Modes::LlmMode.new(@client, @context_manager)
+      @current_mode = dependencies[:initial_mode] || @mode_factory.create(:llm)
 
       # Initialize command handler with io_service
       @command_handler = dependencies[:command_handler] ||
@@ -181,22 +183,13 @@ module OllamaRepl
     # Switches the durable REPL mode.
     # @param mode_type [Symbol] The type of mode to switch to (e.g., :llm, :ruby, :shell)
     def switch_mode(mode_type)
-      new_mode_instance = case mode_type
-      when :llm
-        Modes::LlmMode.new(@client, @context_manager)
-      when :ruby
-        Modes::RubyMode.new(@client, @context_manager)
-      when :shell
-        Modes::ShellMode.new(@client, @context_manager)
-      else
-        @io_service.display_error("Unknown mode type '#{mode_type}'")
-        return # Don't switch if mode is unknown
+      begin
+        @current_mode = @mode_factory.create(mode_type)
+        mode_name = @current_mode.class.name.split("::").last.gsub("Mode", "")
+        @io_service.display("Switched to #{mode_name} mode.")
+      rescue ArgumentError => e
+        @io_service.display_error(e.message)
       end
-
-      @current_mode = new_mode_instance
-      # Use the new mode's prompt to get the name implicitly
-      mode_name = @current_mode.class.name.split("::").last.gsub("Mode", "")
-      @io_service.display("Switched to #{mode_name} mode.")
     end
 
     # Executes a given input in a specific mode temporarily, without changing the durable mode.
@@ -204,20 +197,14 @@ module OllamaRepl
     # @param mode_type [Symbol] The type of mode to execute in (e.g., :llm, :ruby, :shell)
     # @param input [String] The input string to handle in the specified mode.
     def run_in_mode(mode_type, input)
-      mode_instance = case mode_type
-      when :llm
-        Modes::LlmMode.new(@client, @context_manager)
-      when :ruby
-        Modes::RubyMode.new(@client, @context_manager)
-      when :shell
-        Modes::ShellMode.new(@client, @context_manager)
-      else
-        @io_service.display_error("Cannot run in unknown mode type '#{mode_type}'")
-        return
+      begin
+        mode_instance = @mode_factory.create(mode_type)
+        mode_instance.handle_input(input)
+      rescue ArgumentError => e
+        @io_service.display_error(e.message)
+      rescue => e
+        @io_service.display_execution_error(mode_type.to_s, e)
       end
-      mode_instance.handle_input(input)
-    rescue => e # Catch errors during temporary execution
-      @io_service.display_execution_error(mode_type.to_s, e)
     end
 
     # Public method still needed by CommandHandler for /file command
