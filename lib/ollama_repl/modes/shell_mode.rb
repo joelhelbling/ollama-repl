@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-require 'open3'
-require_relative 'mode'
+require "open3"
+require_relative "mode"
 
 module OllamaRepl
   module Modes
@@ -21,7 +21,7 @@ module OllamaRepl
       def handle_input(command)
         puts "❯ Executing..."
         # Add command to context first, using helper method
-        add_message('user', "Execute shell command: ```\n#{command}\n```")
+        add_message("user", "Execute shell command: ```\n#{command}\n```")
 
         stdout_str, stderr_str, error = capture_shell_execution(command)
 
@@ -47,7 +47,7 @@ module OllamaRepl
         puts "--------------"
 
         # Add execution result to context, using helper method
-        add_message('system', output_message)
+        add_message("system", output_message)
       end
 
       private
@@ -56,27 +56,27 @@ module OllamaRepl
       def format_output_message(stdout_str, stderr_str, error)
         message = "System Message: Shell Execution Output\n"
         message += "STDOUT:\n"
-        
+
         # Handle empty stdout with a newline after "(empty)"
-        if stdout_str.empty?
-          message += "(empty)\n"
+        message += if stdout_str.empty?
+          "(empty)\n"
         else
-          message += stdout_str
+          stdout_str
         end
-        
+
         message += "STDERR:\n"
-        
+
         # Handle empty stderr with a newline after "(empty)"
-        if stderr_str.empty?
-          message += "(empty)\n"
+        message += if stderr_str.empty?
+          "(empty)\n"
         else
-          message += stderr_str
+          stderr_str
         end
-        
+
         if error
           message += "\nException:\nError: #{error.class}: #{error.message}"
         end
-        
+
         # Add the final newline that the tests expect
         message + "\n"
       end
@@ -102,10 +102,10 @@ module OllamaRepl
           unless status.success?
             stderr_str = "#{stderr_str.chomp}\nCommand exited with status: #{status.exitstatus}"
           end
-        rescue StandardError => e
+        rescue => e
           # Catch errors during the execution setup itself (e.g., command not found)
           error = e
-          stderr_str = "\nExecution failed: No such file or directory - #{e.message.split(' - ').last}"
+          stderr_str = "\nExecution failed: No such file or directory - #{e.message.split(" - ").last}"
         end
 
         # We return the exception object if Ruby raised one during execution setup.

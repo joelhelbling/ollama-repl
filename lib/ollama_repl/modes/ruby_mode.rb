@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-require 'stringio'
-require_relative 'mode'
+require "stringio"
+require_relative "mode"
 
 module OllamaRepl
   module Modes
@@ -21,7 +21,7 @@ module OllamaRepl
       def handle_input(code)
         puts "💎 Executing..."
         # Add code to context first, using helper method
-        add_message('user', "Execute Ruby code: ```ruby\n#{code}\n```")
+        add_message("user", "Execute Ruby code: ```ruby\n#{code}\n```")
 
         stdout_str, stderr_str, error = capture_ruby_execution(code)
 
@@ -43,7 +43,7 @@ module OllamaRepl
         puts "--------------"
 
         # Add execution result to context, using helper method
-        add_message('system', output_message)
+        add_message("system", output_message)
       end
 
       private
@@ -55,11 +55,11 @@ module OllamaRepl
         message += stdout_str.empty? ? "(empty)" : stdout_str.chomp
         message += "\nSTDERR:\n"
         message += stderr_str.empty? ? "(empty)" : stderr_str.chomp
-        
+
         if error
           message += "\nException:\nError: #{error.class}: #{error.message}\nBacktrace:#{error.backtrace.join("\n")}"
         end
-        
+
         message + "\n"
       end
 

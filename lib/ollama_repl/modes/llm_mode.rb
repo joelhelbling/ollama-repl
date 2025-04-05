@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-require_relative 'mode'
-require_relative '../client' # For Client::ApiError
+require_relative "mode"
+require_relative "../client" # For Client::ApiError
 
 module OllamaRepl
   module Modes
@@ -19,13 +19,13 @@ module OllamaRepl
       # @param input [String] The user's input prompt.
       # @return [void]
       def handle_input(input)
-        add_message('user', input) # Use protected helper from base Mode
+        add_message("user", input) # Use protected helper from base Mode
         full_response = String.new
         $stdout.print "\nAssistant: " # Print prefix once using $stdout directly for testability
 
         begin
           @client.chat(@context_manager.for_api) do |chunk|
-            content_part = chunk.dig('message', 'content')
+            content_part = chunk.dig("message", "content")
             unless content_part.nil? || content_part.empty?
               $stdout.print content_part # Stream output directly using $stdout for testability
               $stdout.flush
@@ -36,8 +36,7 @@ module OllamaRepl
           puts "" # Final newline after streaming
 
           # Add complete response to context
-          add_message('assistant', full_response) unless full_response.empty?
-
+          add_message("assistant", full_response) unless full_response.empty?
         rescue Client::ApiError => e
           # Error handling remains similar, using instance variables
           puts "\n[API Error interacting with LLM] #{e.message}"

@@ -28,13 +28,13 @@ RSpec.describe OllamaRepl::ModelCacheService do
     it "refreshes cache after expiration" do
       # Set a shorter cache duration for testing
       service = described_class.new(client, cache_duration: 0.01)
-      
+
       # First call fetches
       service.get_models
-      
+
       # Wait for cache to expire
       sleep 0.02
-      
+
       # Second call should fetch again
       expect(client).to receive(:list_models).once.and_return(models)
       result = service.get_models
@@ -44,7 +44,7 @@ RSpec.describe OllamaRepl::ModelCacheService do
     it "forces refresh when requested" do
       # First call fetches
       service.get_models
-      
+
       # Second call with force_refresh should fetch again
       expect(client).to receive(:list_models).once.and_return(models)
       result = service.get_models(force_refresh: true)
@@ -53,7 +53,7 @@ RSpec.describe OllamaRepl::ModelCacheService do
 
     it "handles errors during model fetching" do
       allow(client).to receive(:list_models).and_raise(StandardError.new("API error"))
-      
+
       # Should not raise error but return empty array
       result = service.get_models
       expect(result).to eq([])

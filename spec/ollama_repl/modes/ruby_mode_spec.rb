@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-require 'spec_helper'
-require 'ollama_repl/modes/ruby_mode'
-require 'ollama_repl/context_manager'
+require "spec_helper"
+require "ollama_repl/modes/ruby_mode"
+require "ollama_repl/context_manager"
 
 RSpec.describe OllamaRepl::Modes::RubyMode do
   # Note: We don't need a mock client for RubyMode
@@ -10,13 +10,13 @@ RSpec.describe OllamaRepl::Modes::RubyMode do
   # Pass nil for client as it's not used by RubyMode directly
   let(:mode) { described_class.new(nil, mock_context_manager) }
 
-  describe '#prompt' do
-    it 'returns the correct prompt string' do
+  describe "#prompt" do
+    it "returns the correct prompt string" do
       expect(mode.prompt).to eq("💎 ❯ ")
     end
   end
 
-  describe '#handle_input' do
+  describe "#handle_input" do
     let(:ruby_code) { "puts 'Hello'; $stderr.puts 'Error msg'; 1 + 1" }
     let(:expected_stdout) { "Hello\n" }
     let(:expected_stderr) { "Error msg\n" }
@@ -30,14 +30,14 @@ RSpec.describe OllamaRepl::Modes::RubyMode do
       allow($stdout).to receive(:puts)
     end
 
-    it 'adds the user code execution message to context' do
-      expect(mock_context_manager).to receive(:add).with('user', expected_context_user_message).ordered
+    it "adds the user code execution message to context" do
+      expect(mock_context_manager).to receive(:add).with("user", expected_context_user_message).ordered
       # Expect the system message *after* the user message
-      expect(mock_context_manager).to receive(:add).with('system', expected_context_system_message).ordered
+      expect(mock_context_manager).to receive(:add).with("system", expected_context_system_message).ordered
       mode.handle_input(ruby_code)
     end
 
-    it 'prints execution status and captured output' do
+    it "prints execution status and captured output" do
       expect($stdout).to receive(:puts).with("💎 Executing...").ordered
       expect($stdout).to receive(:puts).with("[Ruby Execution Result]").ordered
       expect($stdout).to receive(:puts).with("--- STDOUT ---") # removed ordered
@@ -48,12 +48,12 @@ RSpec.describe OllamaRepl::Modes::RubyMode do
       mode.handle_input(ruby_code)
     end
 
-    it 'adds the execution result message to context' do
-      expect(mock_context_manager).to receive(:add).with('system', expected_context_system_message)
+    it "adds the execution result message to context" do
+      expect(mock_context_manager).to receive(:add).with("system", expected_context_system_message)
       mode.handle_input(ruby_code)
     end
 
-    context 'when code execution raises an error' do
+    context "when code execution raises an error" do
       let(:error_code) { "raise 'Something went wrong'" }
       let(:error_message) { "Something went wrong" }
       let(:error_class) { RuntimeError }
@@ -63,7 +63,7 @@ RSpec.describe OllamaRepl::Modes::RubyMode do
         /System Message: Ruby Execution Output\nSTDOUT:\n\(empty\)\nSTDERR:\n\(empty\)\nException:\nError: #{error_class}: #{error_message}\nBacktrace:/
       end
 
-      it 'prints an error status and details' do
+      it "prints an error status and details" do
         expect($stdout).to receive(:puts).with("💎 Executing...").ordered
         expect($stdout).to receive(:puts).with("[Ruby Execution Error]").ordered
         expect($stdout).to receive(:puts).with(/Error: #{error_class}: #{error_message}/).ordered # Check error details are printed
@@ -75,27 +75,27 @@ RSpec.describe OllamaRepl::Modes::RubyMode do
         mode.handle_input(error_code)
       end
 
-      it 'adds the user message and error result message to context' do
-        expect(mock_context_manager).to receive(:add).with('user', expected_context_user_message).ordered
+      it "adds the user message and error result message to context" do
+        expect(mock_context_manager).to receive(:add).with("user", expected_context_user_message).ordered
         # Use match instead of eq for the system message due to backtrace variability
-        expect(mock_context_manager).to receive(:add).with('system', match(expected_context_system_message_fragment)).ordered
+        expect(mock_context_manager).to receive(:add).with("system", match(expected_context_system_message_fragment)).ordered
         mode.handle_input(error_code)
       end
     end
 
-    context 'when code produces no stdout/stderr' do
+    context "when code produces no stdout/stderr" do
       let(:silent_code) { "a = 1" }
       let(:expected_context_system_message) {
         "System Message: Ruby Execution Output\nSTDOUT:\n(empty)\nSTDERR:\n(empty)\n"
       }
 
-      it 'correctly reports empty output' do
-         expect($stdout).to receive(:puts).with("(empty)").twice # Once for STDOUT, once for STDERR
-         mode.handle_input(silent_code)
+      it "correctly reports empty output" do
+        expect($stdout).to receive(:puts).with("(empty)").twice # Once for STDOUT, once for STDERR
+        mode.handle_input(silent_code)
       end
 
-       it 'adds the correct system message to context' do
-        expect(mock_context_manager).to receive(:add).with('system', expected_context_system_message)
+      it "adds the correct system message to context" do
+        expect(mock_context_manager).to receive(:add).with("system", expected_context_system_message)
         mode.handle_input(silent_code)
       end
     end

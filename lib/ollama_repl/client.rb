@@ -1,13 +1,14 @@
 # frozen_string_literal: true
 
-require 'faraday'
-require 'faraday/net_http' # Explicitly require adapter
-require 'json'
-require 'uri'
+require "faraday"
+require "faraday/net_http" # Explicitly require adapter
+require "json"
+require "uri"
 
 module OllamaRepl
   class Client
     class ApiError < StandardError; end
+
     # Define a specific error for when the model isn't found
     class ModelNotFoundError < StandardError
       attr_reader :available_models
@@ -46,11 +47,11 @@ module OllamaRepl
         messages: messages,
         stream: true # Enable streaming
       }
-      puts "[Debug] Sending to Ollama (streaming): #{payload.inspect}" if ENV['DEBUG']
+      puts "[Debug] Sending to Ollama (streaming): #{payload.inspect}" if ENV["DEBUG"]
 
       full_response_content = String.new # To accumulate content for potential error reporting (ensure mutable)
 
-      @conn.post('/api/chat', payload) do |req|
+      @conn.post("/api/chat", payload) do |req|
         req.options.on_data = proc do |chunk, _overall_received_bytes, _env|
           # Ollama streams JSON objects separated by newlines
           chunk.split("\n").each do |line|
@@ -58,12 +59,12 @@ module OllamaRepl
 
             begin
               parsed_chunk = JSON.parse(line)
-              full_response_content << parsed_chunk.dig('message', 'content').to_s # Accumulate for errors
+              full_response_content << parsed_chunk.dig("message", "content").to_s # Accumulate for errors
               # Yield the parsed chunk for the caller to process
               yield parsed_chunk if block_given?
             rescue JSON::ParserError => e
               # Log or handle partial JSON chunks if necessary, but often indicates end-of-stream issues
-              puts "[Debug] JSON parse error on chunk: #{e.message} - Chunk: #{line.inspect}" if ENV['DEBUG']
+              puts "[Debug] JSON parse error on chunk: #{e.message} - Chunk: #{line.inspect}" if ENV["DEBUG"]
               # Decide if we should raise or just warn
             end
           end
@@ -85,14 +86,14 @@ module OllamaRepl
     end
 
     def list_models
-      response = @conn.get('/api/tags')
-      response.body['models'].map { |m| m['name'] } # Extract model names
+      response = @conn.get("/api/tags")
+      response.body["models"].map { |m| m["name"] } # Extract model names
     rescue Faraday::Error => e
       raise ApiError, "API request failed to list models: #{e.message} (Response: #{e.response_body if e.respond_to?(:response_body)})"
     rescue JSON::ParserError => e
       raise ApiError, "Failed to parse models API response: #{e.message}"
     rescue NoMethodError, TypeError => e
-      raise ApiError, "Unexpected models API response structure: #{e.message} (Body: #{response&.body || 'N/A'})"
+      raise ApiError, "Unexpected models API response structure: #{e.message} (Body: #{response&.body || "N/A"})"
     end
 
     # Check if the API host is reachable and the model exists
@@ -110,11 +111,11 @@ module OllamaRepl
       true
     rescue ApiError => e
       # Log the original error details for more debugging info
-      puts "[Debug] Raw connection ApiError: #{e.inspect}" if ENV['DEBUG']
+      puts "[Debug] Raw connection ApiError: #{e.inspect}" if ENV["DEBUG"]
       raise Error, "Error connecting to Ollama at #{@host}: #{e.message}"
     rescue Faraday::ConnectionFailed => e
       # Catch specific connection errors for better logging
-      puts "[Debug] Raw Faraday::ConnectionFailed: #{e.inspect}" if ENV['DEBUG']
+      puts "[Debug] Raw Faraday::ConnectionFailed: #{e.inspect}" if ENV["DEBUG"]
       raise Error, "Error connecting to Ollama at #{@host}: Connection failed - #{e.message}"
     end
   end

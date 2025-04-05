@@ -7,7 +7,7 @@ module OllamaRepl
     end
 
     def add(role, content)
-      @messages << { role: role, content: content }
+      @messages << {role: role, content: content}
     end
 
     def all
@@ -21,8 +21,8 @@ module OllamaRepl
     def size
       @messages.length
     end
-    
-    alias length size
+
+    alias_method :length, :size
 
     def clear
       @messages.clear

@@ -10,7 +10,7 @@ RSpec.describe OllamaRepl do
       repl_instance = instance_double(OllamaRepl::Repl)
       expect(OllamaRepl::Repl).to receive(:new).and_return(repl_instance)
       expect(repl_instance).to receive(:run)
-      
+
       OllamaRepl.run
     end
   end

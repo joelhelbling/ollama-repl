@@ -1,16 +1,16 @@
 # frozen_string_literal: true
 
 # Stdlib requires
-require 'pathname'
-require 'readline'
-require 'json'
-require 'stringio'
-require 'uri'
+require "pathname"
+require "readline"
+require "json"
+require "stringio"
+require "uri"
 
 # Gem requires
-require 'dotenv/load'
-require 'faraday'
-require 'faraday/net_http'
+require "dotenv/load"
+require "faraday"
+require "faraday/net_http"
 
 # Internal requires
 require_relative "ollama_repl/version"
@@ -26,4 +26,3 @@ module OllamaRepl
     Repl.new.run
   end
 end
-
