@@ -38,9 +38,11 @@ Gem::Specification.new do |spec|
   spec.add_dependency "faraday-net_http", "~> 3.0" # Explicit adapter
   spec.add_dependency "readline", "~> 0"          # Included with Ruby, but good practice
 
-  # Development dependencies (optional)
-  # spec.add_development_dependency "bundler", "~> 2.3"
-  # spec.add_development_dependency "rake", "~> 13.0"
-  # spec.add_development_dependency "rspec", "~> 3.0"
+  # Development dependencies
+  spec.add_development_dependency "bundler", "~> 2.3"
+  spec.add_development_dependency "rake", "~> 13.0"
+  spec.add_development_dependency "rspec", "~> 3.12"
+  spec.add_development_dependency "webmock", "~> 3.18" # For mocking HTTP requests
+  spec.add_development_dependency "simplecov", "~> 0.22" # For code coverage
 end
 
